@@ -46,8 +46,8 @@ jobs:
         run: |
           set -euo pipefail
           REPO="$GITHUB_REPOSITORY"
+          PR="$PR_NUMBER"
           if [ "$EVENT_NAME" != "pull_request_target" ]; then
-            PR="$PR_NUMBER"
             info=$(gh api "repos/$REPO/pulls/$PR")
             HEAD_SHA=$(jq -r .head.sha <<<"$info")
             HEAD_REPO=$(jq -r .head.repo.full_name <<<"$info")
