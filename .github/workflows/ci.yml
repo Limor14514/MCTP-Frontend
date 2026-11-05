@@ -145,3 +145,26 @@ jobs:
             gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body" >/dev/null
             echo "已新增预览评论"
           fi
+
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download dist
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+
+      # 先以 advisory 方式接入，稳定后再把 lighthouse 加入必需检查。
+      # 配置里的 accessibility / LCP / CLS 是 error 级，抖动时先记录但不阻塞合并。
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v12
+        continue-on-error: true
+        with:
+          configPath: ./lighthouserc.cjs
+          uploadArtifacts: true
+          temporaryPublicStorage: true
