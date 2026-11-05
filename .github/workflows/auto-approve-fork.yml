@@ -1,0 +1,39 @@
+name: Auto approve trusted fork runs
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  pull-requests: read
+
+jobs:
+  approve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Approve pending runs for allowlisted fork author
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ALLOWED_AUTHOR: Limor14514
+        run: |
+          set -euo pipefail
+          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" \
+            --jq '.workflow_runs[] | select(.conclusion == "action_required") | [.id, .head_branch, .name] | @tsv')
+          if [ -z "$runs" ]; then
+            echo "no action_required runs"
+            exit 0
+          fi
+          while IFS=$'\t' read -r id branch name; do
+            [ -n "$id" ] || continue
+            author=$(gh api "repos/${GITHUB_REPOSITORY}/pulls?head=${ALLOWED_AUTHOR}:${branch}&state=open" \
+              --jq '.[0].user.login // empty')
+            if [ "$author" != "$ALLOWED_AUTHOR" ]; then
+              echo "skip run $id ($name) branch $branch: author=$author"
+              continue
+            fi
+            echo "approve run $id ($name) branch $branch"
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/approve" >/dev/null
+          done <<< "$runs"
