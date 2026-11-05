@@ -79,6 +79,41 @@ async function github(path, init, token) {
   return response.json()
 }
 
+export async function upsertComment({ repo, pullRequest, body, marker, token }, request = github) {
+  const comments = []
+  for (let page = 1; ; page += 1) {
+    const result = await request(
+      `/repos/${repo}/issues/${pullRequest}/comments?per_page=100&page=${page}`,
+      {},
+      token,
+    )
+    if (!Array.isArray(result)) throw new Error('GitHub 返回的 PR 评论列表格式无效')
+    comments.push(...result)
+    if (result.length < 100) break
+  }
+
+  const matches = comments.filter((comment) => comment.body?.includes(marker))
+  if (matches.length) {
+    const [keep, ...duplicates] = matches
+    await request(
+      `/repos/${repo}/issues/comments/${keep.id}`,
+      { method: 'PATCH', body: JSON.stringify({ body }) },
+      token,
+    )
+    for (const duplicate of duplicates) {
+      await request(`/repos/${repo}/issues/comments/${duplicate.id}`, { method: 'DELETE' }, token)
+    }
+    return { action: 'updated', id: keep.id, duplicates: duplicates.length }
+  }
+
+  const created = await request(
+    `/repos/${repo}/issues/${pullRequest}/comments`,
+    { method: 'POST', body: JSON.stringify({ body }) },
+    token,
+  )
+  return { action: 'created', id: created.id, duplicates: 0 }
+}
+
 async function main() {
   const token = process.env.GH_TOKEN
   const repo = process.env.GH_REPO
@@ -97,31 +132,19 @@ async function main() {
         coverage,
         buildUrl: process.env.BUILD_URL,
       })
-  const marker = lighthouseKind ? LIGHTHOUSE_MARKER : MARKER
-  const comments = await github(`/repos/${repo}/issues/${pullRequest}/comments?per_page=100`, {}, token)
-  const matches = comments.filter((comment) => comment.body?.includes(marker))
-  if (matches.length) {
-    const [keep, ...duplicates] = matches
-    await github(
-      `/repos/${repo}/issues/comments/${keep.id}`,
-      { method: 'PATCH', body: JSON.stringify({ body }) },
-      token,
-    )
-    for (const duplicate of duplicates) {
-      await github(`/repos/${repo}/issues/comments/${duplicate.id}`, { method: 'DELETE' }, token)
-    }
-    console.log(`已更新 PR #${pullRequest} 的评论 #${keep.id}（清理 ${duplicates.length} 条重复）`)
-    return
-  }
-  const created = await github(
-    `/repos/${repo}/issues/${pullRequest}/comments`,
-    { method: 'POST', body: JSON.stringify({ body }) },
-    token,
-  )
-  console.log(`已新增 PR #${pullRequest} 的评论 #${created.id}`)
+      const marker = lighthouseKind ? LIGHTHOUSE_MARKER : MARKER
+      const result = await upsertComment({ repo, pullRequest, body, marker, token })
+      if (result.action === 'updated') {
+        console.log(`已更新 PR #${pullRequest} 的评论 #${result.id}（清理 ${result.duplicates} 条重复）`)
+      } else {
+        console.log(`已新增 PR #${pullRequest} 的评论 #${result.id}`)
+      }
 }
 
 const entry = process.argv[1] ? pathToFileURL(process.argv[1]).href : ''
 if (import.meta.url === entry) {
-  main().catch((error) => console.log(`PR 评论失败（不影响构建结果）：${error.message}`))
+  main().catch((error) => {
+    console.error(`PR 评论失败（不影响构建结果）：${error.message}`)
+    process.exitCode = 1
+  })
 }

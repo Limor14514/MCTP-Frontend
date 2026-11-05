@@ -7,6 +7,7 @@ import {
   MARKER,
   parseCoverage,
   parseJunit,
+  upsertComment,
 } from '../scripts/pr-comment.mjs'
 
 test('buildLighthouseComment only carries the Lighthouse section', () => {
@@ -62,4 +63,55 @@ test('buildComment skips unavailable reports instead of printing noise', () => {
   assert.equal(body.includes('Lighthouse'), false)
   assert.equal(body.includes('查看 Jenkins 构建'), false)
   assert.match(body, /本次构建没有可汇总的报告/)
+})
+
+test('upsertComment searches later pages before creating a comment', async () => {
+  const calls = []
+  const request = async (path, init) => {
+    calls.push({ path, init })
+    if (path.includes('?')) {
+      if (path.endsWith('page=1')) return Array.from({ length: 100 }, (_, id) => ({ id, body: 'other' }))
+      return [{ id: 101, body: `${MARKER}\nold report` }]
+    }
+    return null
+  }
+
+  const result = await upsertComment(
+    { repo: 'owner/repo', pullRequest: '12', body: `${MARKER}\nnew report`, marker: MARKER, token: 'token' },
+    request,
+  )
+
+  assert.deepEqual(result, { action: 'updated', id: 101, duplicates: 0 })
+  assert.equal(calls.length, 3)
+  assert.equal(calls[0].path.endsWith('page=1'), true)
+  assert.equal(calls[1].path.endsWith('page=2'), true)
+  assert.equal(calls[2].init.method, 'PATCH')
+})
+
+test('upsertComment removes all duplicate marked comments across pages', async () => {
+  const calls = []
+  const request = async (path, init) => {
+    calls.push({ path, init })
+    if (path.includes('?')) {
+      if (path.endsWith('page=1')) {
+        return Array.from({ length: 100 }, (_, id) => ({
+          id,
+          body: id < 2 ? MARKER : 'other',
+        }))
+      }
+      return [{ id: 101, body: MARKER }]
+    }
+    return null
+  }
+
+  const result = await upsertComment(
+    { repo: 'owner/repo', pullRequest: '12', body: MARKER, marker: MARKER, token: 'token' },
+    request,
+  )
+
+  assert.deepEqual(result, { action: 'updated', id: 0, duplicates: 2 })
+  assert.deepEqual(
+    calls.filter(({ init }) => init.method === 'DELETE').map(({ path }) => path),
+    ['/repos/owner/repo/issues/comments/1', '/repos/owner/repo/issues/comments/101'],
+  )
 })
