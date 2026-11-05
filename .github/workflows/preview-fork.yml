@@ -47,6 +47,7 @@ jobs:
           set -euo pipefail
           REPO="$GITHUB_REPOSITORY"
           PR="$PR_NUMBER"
+          echo "ready=false" >> "$GITHUB_OUTPUT"
           if [ "$EVENT_NAME" != "pull_request_target" ]; then
             info=$(gh api "repos/$REPO/pulls/$PR")
             HEAD_SHA=$(jq -r .head.sha <<<"$info")
@@ -92,9 +93,10 @@ jobs:
             exit 1
           fi
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Download dist artifact
-        if: steps.resolve.outputs.number != ''
+        if: steps.resolve.outputs.ready == 'true'
         uses: actions/download-artifact@v4
         with:
           name: dist
@@ -103,7 +105,7 @@ jobs:
           path: dist
 
       - name: Deploy preview to gh-pages
-        if: steps.resolve.outputs.number != ''
+        if: steps.resolve.outputs.ready == 'true'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -112,7 +114,7 @@ jobs:
           keep_files: true
 
       - name: Upsert preview comment
-        if: steps.resolve.outputs.number != ''
+        if: steps.resolve.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.resolve.outputs.number }}
