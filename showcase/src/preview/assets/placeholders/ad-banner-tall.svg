@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900" viewBox="0 0 600 900">
+  <!-- 文件用途：广告位占位横幅素材（竖版构图参考 600x900） -->
+  <!-- 作用：竖版构图参考，适合移动端/侧栏竖幅；待真实广告素材补充后替换 -->
+  <rect width="600" height="900" fill="#2b2118"/>
+  <rect x="1" y="1" width="598" height="898" fill="none" stroke="#c88a3a" stroke-width="2" stroke-dasharray="12 8"/>
+  <!-- 顶部主视觉占位 -->
+  <rect x="40" y="60" width="520" height="420" fill="#3a2e22" stroke="#a06a24" stroke-width="2"/>
+  <text x="300" y="280" fill="#c88a3a" font-family="monospace" font-size="30" text-anchor="middle">主视觉图占位</text>
+  <!-- 下方文案区占位 -->
+  <text x="300" y="560" fill="#c88a3a" font-family="monospace" font-size="36" text-anchor="middle">广告标题占位</text>
+  <text x="300" y="610" fill="#b8ad9d" font-family="monospace" font-size="20" text-anchor="middle">副标题 / 说明文案占位</text>
+  <rect x="210" y="660" width="180" height="52" rx="6" fill="#c88a3a"/>
+  <text x="300" y="694" fill="#2b2118" font-family="monospace" font-size="20" text-anchor="middle">按钮占位</text>
+  <text x="300" y="870" fill="#b8ad9d" font-family="monospace" font-size="14" text-anchor="middle">竖版 600 x 900 · TODO-ASSET</text>
+</svg>

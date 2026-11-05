@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300">
+  <!-- 文件用途：广告位占位横幅素材（横版构图参考 1200x300） -->
+  <!-- 作用：横版构图参考，适合桌面端右侧广告位；待真实广告素材补充后替换 -->
+  <rect width="1200" height="300" fill="#2b2118"/>
+  <rect x="1" y="1" width="1198" height="298" fill="none" stroke="#c88a3a" stroke-width="2" stroke-dasharray="12 8"/>
+  <!-- 左侧主视觉占位 -->
+  <rect x="40" y="50" width="360" height="200" fill="#3a2e22" stroke="#a06a24" stroke-width="2"/>
+  <text x="220" y="155" fill="#c88a3a" font-family="monospace" font-size="26" text-anchor="middle">主视觉图占位</text>
+  <!-- 右侧文案区占位 -->
+  <text x="440" y="120" fill="#c88a3a" font-family="monospace" font-size="40">广告标题占位</text>
+  <text x="440" y="170" fill="#b8ad9d" font-family="monospace" font-size="20">副标题 / 说明文案占位</text>
+  <rect x="440" y="200" width="180" height="48" rx="6" fill="#c88a3a"/>
+  <text x="530" y="232" fill="#2b2118" font-family="monospace" font-size="20" text-anchor="middle">按钮占位</text>
+  <text x="1180" y="288" fill="#b8ad9d" font-family="monospace" font-size="14" text-anchor="end">横版 1200 x 300 · TODO-ASSET</text>
+</svg>

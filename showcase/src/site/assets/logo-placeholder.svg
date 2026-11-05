@@ -1,0 +1,5 @@
+<!-- 占位 Logo：待用户提供正式矢量图标后直接替换本文件（保持文件名即可，无需改代码） -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" shape-rendering="crispEdges">
+  <rect x="0" y="0" width="12" height="12" fill="none" stroke="#fff" stroke-width="1" />
+  <path fill="#fff" d="M2 3h2v1h1v1h2V4h1V3h2v6H8V6H7v1H5V6H4v3H2z" />
+</svg>

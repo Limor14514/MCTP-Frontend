@@ -1,0 +1,145 @@
+/**
+ * 文件用途：新版站点全局样式（只在 SiteShell 下生效的基础变量与重置）
+ * 说明：旧版 src/preview 的 theme.css / base.css 不再引入，新旧样式互不影响。
+ */
+/*
+ * 第六轮：换掉 Pixelify Sans（字母间距太小，看起来黏在一起）。
+ *  - 像素字（PixelText 组件）改用本站自绘点阵字库，见 pixel/latinFont.js；
+ *  - CSS 里的小号像素文字（英文副标题、版本号、输入框等）改用 VT323：真正的点阵终端字体，
+ *    字与字之间留有空隙。它的字面比较小，这里注册成 "Site Pixel" 并放大 135%，
+ *    这样各处原来写的字号不用改，看起来和以前差不多大。
+ */
+@font-face {
+  font-family: 'Site Pixel';
+  src: url('../../../node_modules/@fontsource/vt323/files/vt323-latin-400-normal.woff2') format('woff2');
+  font-display: swap;
+  size-adjust: 135%;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2190-2199, U+2212, U+2215;
+}
+@font-face {
+  font-family: 'Site Pixel';
+  src: url('../../../node_modules/@fontsource/vt323/files/vt323-latin-ext-400-normal.woff2') format('woff2');
+  font-display: swap;
+  size-adjust: 135%;
+  unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+  --space-bg: #0b0c10; /* 加载页 / 全站底色：深灰黑，像太空 */
+  --gold: #ffc93c;
+  --font-pixel: 'Site Pixel', monospace;
+  --font-body: system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--space-bg);
+  color: #fff;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* 索引页全屏分段时锁定文档：不出现滚动条、iOS 无橡皮筋回弹、地址栏伸缩不引起跳动 */
+html.fp-lock,
+html.fp-lock body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* ======================================================================
+ * 第四轮：主页面 / 反馈页共用的《机械动力》风格 UI
+ * 配色取自黄铜（brass）与安山机壳（andesite casing）的观感，均为本站自定的近似色。
+ * ====================================================================== */
+:root {
+  --brass-hi: #fff0a8;
+  --brass: #e8b24a;
+  --brass-mid: #c98a2e;
+  --brass-lo: #8d5418;
+  --casing: #3a3b40;
+  --casing-hi: #6b6c71;
+  --casing-lo: #1c1d21;
+  --outline: #140d07;
+  --paper: #f2e5c3;
+  --ink: #3b2a17;
+  /* 表单等需要输入的地方用的字体：拉丁字母是像素字（VT323），中文回退到宋体 */
+  --font-ui: 'Site Pixel', SimSun, 'Microsoft YaHei', sans-serif;
+}
+
+/* 黄铜按钮：深色描边 + 左上高光 + 右下阴影，按下时下沉 2px */
+.mc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: 0;
+  background: linear-gradient(180deg, #f9d775 0%, var(--brass) 55%, var(--brass-mid) 100%);
+  color: #3a2208;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow:
+    0 0 0 2px var(--outline),
+    inset 2px 2px 0 var(--brass-hi),
+    inset -2px -3px 0 var(--brass-lo),
+    0 4px 0 2px rgba(0, 0, 0, 0.45);
+  transition: transform 0.08s, filter 0.15s;
+  user-select: none;
+}
+.mc-btn:hover { filter: brightness(1.08); }
+.mc-btn:active { transform: translateY(2px); }
+.mc-btn:disabled { filter: grayscale(0.8) brightness(0.7); cursor: not-allowed; }
+.mc-btn:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
+/* 次要按钮：安山机壳色 */
+.mc-btn.is-ghost {
+  background: linear-gradient(180deg, #5a5b60, var(--casing));
+  color: #eee;
+  box-shadow:
+    0 0 0 2px var(--outline),
+    inset 2px 2px 0 var(--casing-hi),
+    inset -2px -3px 0 var(--casing-lo),
+    0 4px 0 2px rgba(0, 0, 0, 0.45);
+}
+
+/* 像素输入框 */
+.mc-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: #151517;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  box-shadow: 0 0 0 2px var(--outline), inset 2px 2px 0 #000, inset -2px -2px 0 #3c3c40;
+  outline: none;
+}
+.mc-input:focus { box-shadow: 0 0 0 2px var(--brass), inset 2px 2px 0 #000, inset -2px -2px 0 #3c3c40; }
+
+/* 普通滚动页面（主页面、反馈等）：给固定导航栏留出顶部空间 */
+.site-page {
+  min-height: 100dvh;
+  padding: clamp(84px, 12vh, 120px) clamp(16px, 5vw, 64px) 80px;
+  background: radial-gradient(120% 80% at 50% 0%, #161b26 0%, var(--space-bg) 60%);
+  color: #fff;
+  font-family: var(--font-ui);
+}
+/* 手机上导航栏是两行（见 SiteNav.vue），顶部留白要多一些 */
+@media (max-width: 800px) {
+  .site-page { padding-top: 116px; }
+}

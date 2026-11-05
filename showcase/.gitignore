@@ -1,0 +1,6 @@
+# Showcase 独立子工程自己的忽略规则（依赖、构建产物、本地日志与备份）
+node_modules/
+dist/
+logs/
+*.log
+src/site/_backup-*/

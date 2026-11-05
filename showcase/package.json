@@ -1,0 +1,24 @@
+{
+  "name": "mctp-showcase",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MCTP 方向 A 传动装配线重设计独立展示工程（与 MCTP-Frontend 完全解耦）",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5174",
+    "build": "vite build",
+    "preview": "vite preview --port 5175"
+  },
+  "dependencies": {
+    "@fontsource/pixelify-sans": "^5.2.5",
+    "@fontsource/vt323": "^5.2.5",
+    "gsap": "^3.15.0",
+    "three": "^0.187.0",
+    "vue": "^3.5.32",
+    "vue-router": "^5.4.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.10",
+    "vite": "^8.3.5"
+  }
+}

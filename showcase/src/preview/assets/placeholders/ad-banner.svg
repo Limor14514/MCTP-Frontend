@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300">
+  <!-- 文件用途：广告区占位横幅素材 -->
+  <!-- 作用：骨架阶段用该 SVG 占位广告位，提示建议尺寸 1200x300；待真实广告图素材补充后替换 -->
+  <rect width="1200" height="300" fill="#2b2118"/>
+  <rect x="1" y="1" width="1198" height="298" fill="none" stroke="#c88a3a" stroke-width="2" stroke-dasharray="12 8"/>
+  <text x="600" y="140" fill="#c88a3a" font-family="monospace" font-size="34" text-anchor="middle">广告位占位 1200 x 300</text>
+  <text x="600" y="180" fill="#b8ad9d" font-family="monospace" font-size="18" text-anchor="middle">TODO-ASSET: 广告横幅素材待补</text>
+</svg>

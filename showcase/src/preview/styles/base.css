@@ -1,0 +1,345 @@
+/**
+ * 文件用途：预览页基础样式（仅作用于 .preview-root 作用域）
+ * 作用：提供预览页排版基础（容器宽度、字体、卡片、按钮等通用样式），
+ *       全部选择器带 .preview- 前缀，避免污染现有框架页面。
+ */
+
+/* 作用：预览页期间（html 带 data-theme，仅预览页设置、离开时清除）让 html/body 底色跟随预览主题，
+        并关闭滚动到顶/底时的回弹。
+   原因：滚动越过页面边界时（触控板/手机回弹）会露出 html/body 的底色，那是现有站点的近黑色，
+        与黄铜深褐不一致，形成一段「未覆盖」的空白；改为预览主题底色并禁用回弹后边界干净。 */
+html[data-theme],
+html[data-theme] body {
+  background: var(--preview-bg);
+  overscroll-behavior-y: none;
+}
+
+/* 作用：预览页期间取消现有 App.vue 外层 <main id="main-content" class="site-main"> 的留白与限宽。
+   原因：预览页作为 RouterView 渲染在 .site-main 里，该类自带上 104~132px / 下 64~92px 内边距与 90% 宽度限制，
+        导致页面顶部（往上滑到顶时最明显）与页脚下方各多出一段露出底色的空白带；
+        这里只在 html[data-theme]（仅预览页设置）下覆盖，不修改 App.vue，现有页面不受影响。 */
+html[data-theme] #main-content {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* 作用：预览页根容器——撑满视口、继承主题变量、统一字体。
+   原因：字体变量在 theme.css 中定义，根容器统一挂载以便后代元素继承。 */
+.preview-root {
+  min-height: 100vh;
+  background: var(--preview-bg);
+  color: var(--preview-text);
+  font-family: var(--preview-font, 'Pixelify Sans', 'Microsoft YaHei', sans-serif);
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* 作用：预览页主内容容器，居中限宽。
+   原因：大屏不贴边、小屏自适应，保证区块宽度统一；顶部留白叠加刘海屏安全区。
+   装配线重设计：追加 position:relative（导轨线定位基准）与 counter-reset（工序号自动编号起点）。 */
+.preview-main {
+  width: min(1100px, 100% - 48px);
+  margin: 0 auto;
+  /* 原因：顶部导航高度已由 .preview-shell 的 padding-top 预留，这里只留 24px 呼吸间距。
+          之前此处又叠加了 96px + 安全区，导致顶栏与公告之间多出约 200px 空白带。 */
+  padding: 40px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 80px;
+  position: relative;
+  counter-reset: preview-station;
+}
+
+/* 作用：通用面板卡片样式（公告卡片、广告框、占位框共用）。
+   原因：深褐平色大块易显单调，用四角铆钉 + 铜黄顶线营造「机械动力式」工业细节。
+   装配线重设计：追加左右侧中点「夹具」短黄线（第 5/6 层 linear-gradient），
+   使每张卡片像被装配台两侧的夹具夹住，强化工位感。 */
+.preview-card {
+  position: relative;
+  background-color: var(--preview-bg-panel);
+  /* 作用：四角铆钉点——用 radial-gradient 在四角各画一个小铜黄圆点；
+           第 5/6 层为左右侧夹具（5px × 26px 铜黄深色短块，位置 left/right center）。 */
+  background-image:
+    radial-gradient(circle at 12px 12px, var(--preview-accent) 1.6px, transparent 2.2px),
+    radial-gradient(circle at calc(100% - 12px) 12px, var(--preview-accent) 1.6px, transparent 2.2px),
+    radial-gradient(circle at 12px calc(100% - 12px), var(--preview-accent) 1.6px, transparent 2.2px),
+    radial-gradient(circle at calc(100% - 12px) calc(100% - 12px), var(--preview-accent) 1.6px, transparent 2.2px),
+    linear-gradient(var(--preview-accent-deep), var(--preview-accent-deep)),
+    linear-gradient(var(--preview-accent-deep), var(--preview-accent-deep)),
+    linear-gradient(165deg,
+      color-mix(in srgb, var(--preview-bg-panel) 92%, var(--preview-accent) 8%) 0%,
+      var(--preview-bg-panel) 45%,
+      color-mix(in srgb, var(--preview-bg-panel) 92%, #000000 8%) 100%);
+  background-repeat: no-repeat;
+  background-size: auto, auto, auto, auto, 5px 26px, 5px 26px, 100% 100%;
+  background-position: 0 0, 0 0, 0 0, 0 0, left center, right center, 0 0;
+  border: 1px solid var(--preview-line-strong);
+  border-radius: 12px;
+  padding: 30px;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--preview-shadow) 65%, transparent),
+    0 20px 44px var(--preview-shadow);
+  /* 原因：主题切换时背景/描边/文字做 0.3s 过渡，避免生硬跳变。 */
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+/* 作用：卡片顶部的铜黄装饰短线（居左），强化工业仪表盘感。 */
+.preview-card::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 24px;
+  width: 46px;
+  height: 2px;
+  background: var(--preview-accent);
+  border-radius: 2px;
+}
+
+/* 作用：区块标题（H2），使用像素感字体与铜黄强调色。
+   视觉精修：字号/字距加大形成章节节奏，亮版强调色 + 微辉光打破沉闷，与工序号形成主次对比。 */
+.preview-section-title {
+  margin: 0 0 18px;
+  font-size: 32px;
+  letter-spacing: 0.08em;
+  color: var(--preview-accent-bright);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--preview-accent) 40%, transparent);
+}
+
+/* 作用：正文次要文字。 */
+.preview-muted {
+  color: var(--preview-text-soft);
+  font-size: 14px;
+}
+
+/* 作用：通用主按钮（铜黄底）。 */
+.preview-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 18px;
+  border: 1px solid var(--preview-accent-deep);
+  border-radius: 8px;
+  background: var(--preview-accent-bright);
+  color: #2b2118;
+  font-family: inherit;
+  font-size: 15px;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--preview-accent) 35%, transparent);
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* 作用：按钮悬停反馈——加深背景并轻微上浮。 */
+.preview-btn:hover {
+  background: var(--preview-accent-deep);
+  color: #f2efe2;
+  transform: translateY(-1px);
+}
+
+/* 作用：通用次要按钮（描边幽灵样式）。 */
+.preview-btn--ghost {
+  background: transparent;
+  color: var(--preview-text);
+  border-color: var(--preview-line-strong);
+}
+
+/* 作用：次要按钮悬停——用强调色描边。 */
+.preview-btn--ghost:hover {
+  border-color: var(--preview-accent);
+  color: var(--preview-accent);
+  background: transparent;
+}
+
+/* 作用：按钮按下反馈——轻微下沉，增强点击手感。 */
+.preview-btn:active {
+  transform: translateY(1px);
+}
+
+/* 作用：预览页内按钮/链接的键盘焦点可见性——铜黄描边。
+   原因：保证无障碍，且与整体铜黄主题一致（不沿用全局绿色 focus）。 */
+.preview-root button:focus-visible,
+.preview-root a:focus-visible,
+.preview-root input:focus-visible,
+.preview-root textarea:focus-visible,
+.preview-root summary:focus-visible {
+  outline: 2px solid var(--preview-accent);
+  outline-offset: 3px;
+}
+
+/* 作用：区块卡片的锚点滚动偏移——让锚点定位后标题不被固定顶栏遮挡。 */
+.preview-card {
+  scroll-margin-top: 84px;
+}
+
+/* 作用：通用卡片悬停辉光——小型交互卡片悬停时描边转铜黄并散发柔光。
+   原因：集中在此定义，避免在各组件重复写相同的 hover 规则。 */
+.preview-feature__card,
+.preview-staff__card,
+.preview-skin__card,
+.preview-status__item,
+.preview-fold__item,
+.preview-announce__item,
+.preview-rank__row {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.preview-feature__card:hover,
+.preview-staff__card:hover,
+.preview-skin__card:hover,
+.preview-status__item:hover,
+.preview-fold__item:hover,
+.preview-announce__item:hover,
+.preview-rank__row:hover {
+  border-color: var(--preview-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--preview-accent) 35%, transparent),
+    0 8px 22px var(--preview-shadow);
+}
+
+/* 作用：预览页文字选中色——铜黄底深色字，与主视觉一致。 */
+.preview-root ::selection {
+  background: var(--preview-accent);
+  color: #2b2118;
+}
+
+/* 作用：预览页自定义滚动条（WebKit）。
+   原因：默认滚动条在深色工业主题下过于突兀，自绘更协调。 */
+.preview-root ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.preview-root ::-webkit-scrollbar-track {
+  background: var(--preview-bg);
+}
+
+.preview-root ::-webkit-scrollbar-thumb {
+  background: var(--preview-bg-hover);
+  border-radius: 6px;
+  border: 2px solid var(--preview-bg);
+}
+
+.preview-root ::-webkit-scrollbar-thumb:hover {
+  background: var(--preview-accent-deep);
+}
+
+/* 作用：自定义光标启用时隐藏系统光标（输入区域保留文本光标），避免两套光标叠加。 */
+.has-custom-cursor .preview-root,
+.has-custom-cursor .preview-root *:not(input):not(textarea):not(select) {
+  cursor: none !important;
+}
+
+.has-custom-cursor .preview-root input,
+.has-custom-cursor .preview-root textarea,
+.has-custom-cursor .preview-root select {
+  cursor: text;
+}
+
+/* 作用：顶栏叠加刘海屏安全区，避免固定顶栏被 iPhone 刘海遮挡。 */
+.preview-header {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* 作用：禁止长按图片弹出系统菜单 / 图片拖拽，保持工业风观感干净。 */
+.preview-root img {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* ============================================================
+   装配线工位（方向 A：传动装配线重设计）
+   作用：让各章节区块呈现为「传送带上的装配工位」——
+         - 导轨：.preview-main 左侧贯穿的虚线竖轨，视觉上「输送」各章节；
+         - 工序号：每章自动编号（CSS 计数器），放在卡片左侧导轨上，
+           由 reveal.js 装配动画驱动「从导轨上滑入」；
+         - 夹具：卡片左右侧中点短黄线（已在 .preview-card background 中实现）；
+         - 质检收束：最后一个工位（STAFF）工序号实心反白，表示产线末端质检完成下线。
+   ============================================================ */
+
+/* 作用：左侧装配导轨——贯穿主内容区的虚线竖轨。 */
+.preview-main::before {
+  content: '';
+  position: absolute;
+  top: 24px;
+  bottom: 24px;
+  left: -64px;
+  width: 2px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--preview-station-line) 0 8px,
+    transparent 8px 16px
+  );
+}
+
+/* 作用：主内容下每个章节卡片即一个「工位」，计数器自动 +1。 */
+.preview-main > .preview-card {
+  position: relative;
+  counter-increment: preview-station;
+}
+
+/* 作用：工序号——大号 VT323 等宽编号，位于卡片左侧导轨上。 */
+.preview-main > .preview-card::after {
+  content: counter(preview-station, decimal-leading-zero);
+  position: absolute;
+  top: 10px;
+  left: -92px;
+  z-index: 2;
+  width: 46px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  font-family: 'VT323', 'Pixelify Sans', monospace;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--preview-accent);
+  border: 1px solid var(--preview-station-line);
+  border-radius: 6px;
+  background: var(--preview-bg-panel);
+  box-shadow: 0 4px 10px var(--preview-shadow);
+}
+
+/* 作用：装配动画开始前先隐藏工序号（reveal.js 挂载时设置 data-assemble），
+        装配到位（is-assembled）后再从导轨上滑入，模拟「工位牌被推入工位」。 */
+.preview-main > .preview-card[data-assemble]::after {
+  opacity: 0;
+  transform: translateX(-14px);
+  transition: none;
+}
+
+.preview-main > .preview-card.is-assembled::after {
+  opacity: 1;
+  transform: translateX(0);
+  transition: transform 0.32s ease 0.18s, opacity 0.32s ease 0.18s;
+}
+
+/* 作用：产线末端质检收束——最后一个工位（STAFF）工序号实心反白，表示「质检完成，下线」。 */
+.preview-main > .preview-card:last-of-type::after {
+  color: #2b2118;
+  background: var(--preview-accent);
+  border-color: var(--preview-accent);
+}
+
+/* 作用：窄屏时导轨收起，工序号收进卡片顶部边缘（小号），避免溢出屏幕。 */
+@media (max-width: 720px) {
+  .preview-main::before {
+    display: none;
+  }
+
+  .preview-main > .preview-card::after,
+  .preview-main > .preview-card:last-of-type::after {
+    top: -14px;
+    left: 16px;
+    width: 34px;
+    height: 24px;
+    font-size: 17px;
+  }
+}
+
+/* 作用：系统减少动效时工序号保持静态可见（reveal.js 在 reduced-motion 下不装配，
+        不设置 data-assemble，故此处仅为兜底保险，防止残留标记影响展示）。 */
+@media (prefers-reduced-motion: reduce) {
+  .preview-main > .preview-card[data-assemble]::after {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
