@@ -42,9 +42,14 @@ test('buildComment renders every available report section', () => {
   })
   assert.ok(body.startsWith(MARKER))
   assert.match(body, /\*\*Lighthouse\*\*：性能 92/)
-  assert.match(body, /\*\*测试\*\*：43 通过 \/ 0 失败 \/ 2 跳过/)
+  assert.match(body, /\*\*测试\*\*：41 通过 \/ 0 失败 \/ 2 跳过/)
   assert.match(body, /\*\*覆盖率\*\*：93\.76% lines/)
-  assert.match(body, /\[查看 Jenkins 构建\]/)
+  assert.match(body, /\[查看 CI 构建\]/)
+})
+
+test('buildComment subtracts failures and skipped cases from passed tests', () => {
+  const body = buildComment({ tests: { tests: 3, failed: 1, skipped: 1 } })
+  assert.match(body, /\*\*测试\*\*：1 通过 \/ 1 失败 \/ 1 跳过/)
 })
 
 test('buildComment skips unavailable reports instead of printing noise', () => {

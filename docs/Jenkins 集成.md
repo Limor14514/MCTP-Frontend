@@ -1,104 +1,77 @@
-# Jenkins 集成
+# CI 与 Jenkins 集成
 
-## 目标结构
+## 当前分工
 
-| 任务 | 类型 | 脚本 | 触发 |
-|---|---|---|---|
-| `MCTP-FE` | Multibranch Pipeline | `Jenkinsfile` | push `develop`/`main`、PR |
-| `MCTP-FE-Dependency` | Pipeline | `Jenkinsfile.dependency` | 每周一 09:00、手动（前端 audit + 后端 pip-audit） |
-| `MCTP-Deploy` | Pipeline | 内联脚本（Jenkins 任务配置） | `main` 构建成功后自动触发 |
-
-现有的 `MCTP-Dependency-Health` 改成 `MCTP-FE-Dependency`（Script Path 指向 `Jenkinsfile.dependency`），不要再让它跑全量流水线。
-
-## 建任务
-
-1. New Item → **Multibranch Pipeline**，名字 `MCTP-FE`
-2. Branch Sources → GitHub：
-   - Repository URL：`https://github.com/SelfAbandonment/MCTP-Frontend.git`
-   - Credentials：`github-MCTP`
-3. Behaviors：
-   - Discover branches，Filter by name：`develop main`
-   - Discover pull requests from origin，Strategy：Merging the pull request with the current target branch revision
-4. Build Configuration → Script Path：`Jenkinsfile`
-5. Scan 触发器：Periodically if not otherwise run → 5 分钟
-6. 保存后执行一次 **Scan Repository Now**
-
-## Webhook
-
-GitHub 仓库 → Settings → Webhooks → Add webhook：
-
-- Payload URL：`http://3.25.210.191:10086/github-webhook/`
-- Content type：`application/json`
-- Events：Pushes、Pull requests
-
-## 状态回写
-
-GitHub Branch Source 会为每个分支和 PR 自动回写两个 status：`continuous-integration/jenkins/branch` 和 `continuous-integration/jenkins/pr-merge`，不需要额外配置。
-
-注意：这个版本的 `github` 插件没有 `githubNotify` 步骤，脚本里调用会直接报 `NoSuchMethodError`，所以流水线不再自己回写状态，依赖上面的自动 status。
-
-## 参数
-
-| 参数 | 默认 | 说明 |
+| 位置 | 用途 | 触发 |
 |---|---|---|
-| `SKIP_LIGHTHOUSE` | false | 跳过性能/无障碍检测 |
-| `FORCE_LIGHTHOUSE` | false | 在非 PR 的功能分支上强制运行 Lighthouse（PR 与 `develop`/`main` 默认都会跑） |
-| `LIGHTHOUSE_STRICT` | false | Lighthouse 有 warning 时把构建标记为 UNSTABLE（默认只写描述/评论，不阻塞） |
+| [ci.yml](../.github/workflows/ci.yml) | lint、单测、覆盖率、build、Lighthouse、同仓 PR 预览 | PR、push `develop`/`main`、手动 |
+| [preview-fork.yml](../.github/workflows/preview-fork.yml) | 可信 fork PR 预览，复用已成功的 CI artifact | fork PR、手动 |
+| [preview.yml](../.github/workflows/preview.yml) | PR 关闭清理、每周兜底清理、月初压缩 Pages 历史 | 关闭 PR、定时、手动 |
+| [deploy.yml](../.github/workflows/deploy.yml) | `main` 的 GitHub Pages 前端预览，不是生产部署 | push `main`、手动 |
+| [release.yml](../.github/workflows/release.yml) | 当前 `main` CI 成功后请求 Jenkins 生产部署 | CI 完成、手动 |
+| Jenkins `MCTP-Deploy` | 生产前端 dist + 后端镜像部署 | release workflow 请求 |
+| Jenkins `MCTP-Notify` | AstrBot 通知 | CI 失败 |
+| Jenkins `MCTP-Cleanup` | 部署工作区磁盘治理 | Jenkins 定时、手动 |
 
-## 缓存与产物
+Jenkins 不再运行前后端 CI；旧 `MCTP-FE`、`MCTP-API-CI` 多分支任务不要重新启用。
+根目录的 [Jenkinsfile](../Jenkinsfile)、[Jenkinsfile.dependency](../Jenkinsfile.dependency) 是保留的历史脚本，不代表当前启用的任务。
+核查时，实际 Jenkins 任务为 `MCTP-Deploy`、`MCTP-Notify`、`MCTP-Cleanup`；没有正在运行的依赖巡检任务。`MCTP-Deploy` 只公开 `BRANCH` 和 `FORCE_DEPLOY` 两个参数；最近检查的部署构建由用户触发，尚不能据此确认 GitHub 自动发布已实际跑通。
 
-- Lighthouse 镜像 `mctp/lighthouse-ci:0.15.1` 首次构建 1–2 分钟，之后命中层缓存
-- Lighthouse 在 `develop`/`main`，以及包含 `src/**`、`public/**`、依赖/构建配置变更的 PR 上运行；纯文档 PR 自动跳过
-- 评分与断言摘要写入构建描述；PR 上新增/更新 **Lighthouse 评论**（`<!-- mctp-lighthouse -->`，`scripts/pr-comment.mjs` 的 `REPORT_KIND=lighthouse` 模式）
-- Lighthouse 有 warning 时默认只写构建描述/评论；`LIGHTHOUSE_STRICT=true` 才把构建标记为 **UNSTABLE**
-- 测试/覆盖率与 CI 汇总评论由 GitHub Actions 负责（见下方分工），Jenkins 不再跑 ESLint/单测
-- 产物归档：`dist/index.html`、`dist/assets/**`、`.lighthouseci/**`（不再归档十几 MB 的 `dist/media/**`）
-- 每个分支保留 10 条构建、2 份产物；新构建会中止同分支进行中的旧构建
-- PR 构建结束后自动 `cleanWs()`，避免 `node_modules`/`dist` 占满执行器磁盘
-- `npm audit` 已移到 `MCTP-FE-Dependency` 每周巡检，主流水线不再因依赖告警变红；巡检任务同时用 `uv export` + `pip-audit` 审计后端依赖
-- 覆盖率由 GitHub Actions 的 `test` job 执行（`scripts/coverage-gate.mjs`，下限 **70%**，低于阈值必需检查失败）
-- checkout 使用 `skipDefaultCheckout` + 显式 `checkout scm`（`retry(2)`）；PR 构建先 `deleteDir()`，避免旧工作区造成空目录
-- Node 版本统一为 **24**（Jenkins `Nodejs24`、GitHub Actions、`engines >=24`、`.nvmrc`）
+## CI 门禁与报告
 
-## 与 GitHub Actions 的分工
+- 必需检查名称保持 `lint`、`test`、`build`、`lighthouse`，与 `main`/`develop` 的现有分支保护一致。
+- Node 24；CI 安装使用 `npm ci --include=dev`，即使 runner 设置生产环境也不会漏装 ESLint/Vite；build 维持 Vite 默认生产模式。
+- `lint` 与 `test` 并行；两者通过后 `build` 才运行。
+- 单测输出 JUnit 和原生 Node 覆盖率；测试失败后仍规范化已有 JUnit 并检查覆盖率。
+- 行覆盖率下限 **70%**。测试失败和覆盖率失败都会让 `test` job 失败。
+- 测试报告保留 14 天；`dist` 保留 7 天，供预览复用，不重复安装/构建。
+- 同仓 PR 回写 CI 评论，实际通过数为总数减失败数和跳过数；fork 无写权限时不尝试回写。
+- Lighthouse 保持 **advisory**：断言失败不阻塞合并，但显示 workflow warning 和汇总。必需 job 成功不代表性能断言通过；如需硬门禁，应单独确认后移除 `continue-on-error`。
+- [lighthouserc.cjs](../lighthouserc.cjs) 的 LCP 4000ms、CLS 0.1、无障碍 0.9 等阈值不变。
 
-- **GitHub Actions（分支保护必需检查）**：`lint`、`test`（JUnit + 覆盖率门禁 70%）、`build`；PR 上回写 CI 汇总评论（测试/覆盖率）；PR 预览复用 `build` 的 `dist` artifact 部署；`main` 部署 Pages。
-- **Jenkins**：FE 只做 `build + Lighthouse`（评论 `<!-- mctp-lighthouse -->`），`main` 通过后触发 `MCTP-Deploy`；不再重复 ESLint/单测/覆盖率。
-- 契约检查由 API 的 Jenkins 负责；预览与源站共用一份 `dist`（`vite base` 改为相对路径），gh-pages 每月初自动压缩历史。
+## PR 预览与 Pages
 
-## 依赖巡检 Issue
+- [vite.config.js](../vite.config.js) 使用相对 `base: './'`；同一份 `dist` 可放在站点根目录或 `preview/pr-N/`。
+- 同仓预览、fork 预览、主站 Pages 部署和清理使用同一 `pages-deploy` 并发组，避免同时写 `gh-pages`。
+- GitHub 并发组最多保留一个运行项和一个等待项，不保证 FIFO；密集触发可能替换等待任务。被替换的预览可手动重跑，关闭目录有每周兜底清理。
+- 写入前重新核对 PR 仍开放且 head SHA 没有变化；排队时已关闭/更新的 PR 不再发布旧预览。
+- fork 仍仅允许既有白名单作者；校验指定 run 的仓库、head SHA、事件、workflow ID 和成功状态，不执行 fork 代码。
+- 自动批准仅处理白名单作者当前开放 PR 对应的 `pull_request` CI run，并校验 fork 仓库与 head SHA；不会批准其他 workflow 或失效 revision。
+- 手动 Pages 部署只允许从 `main` 运行。
+- 清理使用 `pull_request_target: closed`，不 checkout、不执行 PR 代码，因此 fork 关闭也可立即清理。
+- 定时清理分页读取所有开放 PR；月初历史压缩用显式 `force-with-lease`，不覆盖未观察到的新提交。
+- Pages API 必须配置 HTTPS 的仓库变量 `VITE_API_BASE_URL`；前端 `VITE_` 变量会暴露给浏览器，不能包含密钥。
 
-- `MCTP-FE-Dependency` 在巡检结束后调用 `scripts/security-issue.mjs`：
-  - 前端 `npm audit` 有漏洞 → 在 MCTP-Frontend 新建/更新 `[安全巡检] 前端依赖漏洞（N 项）`
-  - 后端 `pip-audit` 有漏洞 → 在 MCTP-API 新建/更新 `[安全巡检] 后端依赖漏洞（N 项）`
-  - 漏洞清零 → 自动关闭对应旧 Issue
-- Issue 用 HTML 标记区分前端/后端，重复巡检只更新同一条；失败不影响巡检构建结果
-- 依赖 PR 评论与巡检 Issue 都使用 Jenkins 凭证 `github-MCTP`（需要 Issues 写权限），PR 评论只在 `CHANGE_ID` 存在时执行，所以协作者在仓库内分支提的 PR 同样会收到汇总
+## 生产发布
 
-## AstrBot 构建通知
+1. PR 合入 `main`。
+2. `main` 的 `CI` push run 全部完成且成功。
+3. `release.yml` 通过 `workflow_run` 启动；仅接受本仓库 `main` push 的成功事件。
+4. 验证事件 SHA 仍是当前 `main`；再以只读 GitHub API 确认 FE 与 API 当前 `main` SHA 各自最新的 push CI run 均成功。
+5. 请求前再次核对 `main` SHA，调用 Jenkins `MCTP-Deploy`，参数保持 `BRANCH=main`、`FORCE_DEPLOY`。
 
-- 需要三个 Jenkins **Secret text** 凭证（Global）：
-  - `astrbot-base-url`：`http://<AstrBot-IP>:6185`
-  - `astrbot-api-key`：AstrBot OpenAPI Key，scope 含 `plugin`
-  - `astrbot-webhook-token`：插件配置里的 `webhook_token`
-- 触发：`failure`、`fixed`（上次失败本次恢复）、`unstable`（Lighthouse strict 警告）；凭证缺失或网络失败只写日志，不影响构建
-- 插件源码在 workspace 的 `astrbot-plugins/astrbot_plugin_mctp_ci/`（不在本仓库），采用 `dashboard` 模式，复用 6185 的插件路由
-- 通知内容：仓库、分支/PR、构建号、耗时、链接，渲染为图片卡片；图片发送失败自动回退纯文本
+手动发布必须选择 **main**，也必须已有当前 SHA 的成功 push CI；`force_deploy` 只控制 Jenkins 重部署，不绕过 CI。
+`workflow_run` 工作流需要存在于默认分支 `develop`，功能分支上的修改本身不会改变线上自动发布；请走 PR。
 
-## 磁盘治理
+需要仓库 Secrets：`JENKINS_URL`、`JENKINS_USER`、`JENKINS_TOKEN`。Token 必须是 Jenkins **API Token**，不是登录密码；API Token 请求不依赖 crumb。
+HTTP 请求有连接/总超时，不自动重试部署 POST，以免重复入队。请求成功只代表已接受部署请求，不代表部署完成。
+发布后必须查看对应 `MCTP-Deploy` 构建和线上健康检查。
 
-- 多分支孤儿策略：`pruneDeadBranches=true`、`daysToKeep=0`、`numToKeep=0`，已关闭 PR / 已删除分支的任务在下次扫描时立即删除
-- `MCTP-Cleanup`（每周六 04:00，可手动）：报告 `df`、workspace、jobs 占用；按 GitHub 开放 PR 列表删除已关闭 PR 的工作区；删除 7 天未更新的旧工作区（保留 `*_develop`/`*_main`）；清理 `/tmp/mctp-contract-base-*`、dangling 镜像与 7 天前的 builder 缓存
-- Jenkinsfile 构建保留：10 条构建 / 2 份产物
+**仍需留意的生产发布边界**：
 
-## 生产部署
+- Jenkins 已在 `precheck` 读取前后端 `main` SHA、按 SHA 对去重，并通过同任务排队避免并行覆盖。
+- 但 Jenkins 随后按 `BRANCH=main` 检出分支，不是按 `precheck` 记录的 commit 检出；若任一 `main` 在检查后、checkout 前移动，仍存在竞态。要消除该竞态，需部署任务使用已记录的 SHA checkout。
+- 每个 release workflow 都会验证两个仓库的 CI，并在请求部署前再次确认两边 SHA 没变。可触发器仍分别存在于两仓；Jenkins 的同 SHA 对去重/排队是第二道保护。
+- 对跨仓读取使用公开 GitHub Actions API；网络错误、限流或无成功 CI 均 fail closed（不触发部署），之后需要从 `main` 手动重跑 release。
+- 手动从 Jenkins 直接启动部署不经过 Actions 双仓 CI 门禁；操作前应确认两仓目标 main SHA 的 CI 都通过。
+- Coolify 如仍监听 `main`，应在 Coolify 关闭自动部署，避免双写。此次未改任何线上配置或触发生产部署。
 
-- GitHub Pages 的 `deploy.yml` 只负责 `main` 前端预览
-- 生产由 `MCTP-Deploy` 负责：`MCTP-FE` 或 `MCTP-API-CI` 的 `main` 构建成功后自动触发，参数 `BRANCH=main`
-- `MCTP-Deploy` 只接受 `main`（`precheck` 阶段会拒绝其他分支），并发构建改为排队而不是中止
+## 通知与仓库配置检查
 
-## 常见问题
-
-- **`githubNotify` 报错**：凭证类型不对或 token 缺 `repo:status`；流水线只打印日志，不影响结果
-- **Lighthouse 找不到容器**：Jenkins 不在容器里时脚本会自动退回 `-v $WORKSPACE:$WORKSPACE`
-- **`Nodejs24` 工具不存在**：Jenkins → 系统管理 → 全局工具配置里新增 NodeJS 安装，名字必须是 `Nodejs24`
+- CI 失败才请求 `MCTP-Notify`；fork 不尝试使用不可用的 Secrets。
+- 通知失败显示 warning 和步骤日志，不用 `|| true` 静默吞掉，不改变原 CI 失败结论。
+- Jenkins 的 AstrBot 凭证只在 Jenkins 管理，不写入 GitHub 构建产物或仓库。
+- 截至 2026-11-05，GitHub Actions 默认 Token 是 read；三个 Jenkins Secret 和 HTTPS API 变量已存在。
+- `main`/`develop` 开启严格必需检查与管理员约束，但审批数为 0；前端仓库还允许 merge/rebase，且未自动删除合并分支，与协作规范的 Squash 约定不一致。此次只审查，未修改线上设置。
+- Dependabot 每周检查 npm、每月检查 Actions；依赖巡检脚本不是活跃的 Jenkins 定时任务，不能当作已执行的依赖审计。
+- 本地等价验证：`npm run lint:check`、`npm test`、`npm run build`；覆盖率门禁需额外运行 CI 的报告命令。

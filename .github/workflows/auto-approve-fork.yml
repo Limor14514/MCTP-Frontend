@@ -3,6 +3,7 @@ name: Auto approve trusted fork runs
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
+    branches: [develop, main]
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
@@ -22,18 +23,25 @@ jobs:
           ALLOWED_AUTHOR: Limor14514
         run: |
           set -euo pipefail
-          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" \
-            --jq '.workflow_runs[] | select(.conclusion == "action_required") | [.id, .head_branch, .name] | @tsv')
+          workflow_id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml" --jq '.id')
+          runs=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" \
+            | jq -r --argjson workflow_id "$workflow_id" \
+              '.workflow_runs[] |
+               select(.conclusion == "action_required" and .event == "pull_request" and .workflow_id == $workflow_id) |
+               [.id, .head_branch, .head_repository.full_name, .head_sha, .name] | @tsv')
           if [ -z "$runs" ]; then
-            echo "no action_required runs"
+            echo "no matching CI runs require approval"
             exit 0
           fi
-          while IFS=$'\t' read -r id branch name; do
+          while IFS=$'\t' read -r id branch head_repo head_sha name; do
             [ -n "$id" ] || continue
-            author=$(gh api "repos/${GITHUB_REPOSITORY}/pulls?head=${ALLOWED_AUTHOR}:${branch}&state=open" \
-              --jq '.[0].user.login // empty')
-            if [ "$author" != "$ALLOWED_AUTHOR" ]; then
-              echo "skip run $id ($name) branch $branch: author=$author"
+            branch_query=$(jq -rn --arg branch "$branch" '$branch | @uri')
+            pull=$(gh api "repos/${GITHUB_REPOSITORY}/pulls?head=${ALLOWED_AUTHOR}:${branch_query}&state=open")
+            matches=$(jq --arg author "$ALLOWED_AUTHOR" --arg repo "$head_repo" --arg sha "$head_sha" \
+              '[.[] | select(.user.login == $author and .head.repo.full_name == $repo and .head.sha == $sha)] | length' \
+              <<<"$pull")
+            if [ "$matches" -ne 1 ]; then
+              echo "skip run $id ($name): no unique open allowlisted PR matches its head repository and SHA"
               continue
             fi
             echo "approve run $id ($name) branch $branch"

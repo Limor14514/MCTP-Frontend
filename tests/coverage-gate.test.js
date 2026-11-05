@@ -21,3 +21,8 @@ test('checkCoverage fails when below the threshold or unparsable', () => {
   assert.equal(checkCoverage(REPORT, 80).ok, false)
   assert.equal(checkCoverage('no coverage', 70).ok, false)
 })
+
+test('checkCoverage accepts the exact threshold and rejects just below it', () => {
+  assert.equal(checkCoverage('all files | 70.00 | 80 | 75 |', 70).ok, true)
+  assert.equal(checkCoverage('all files | 69.99 | 80 | 75 |', 70).ok, false)
+})

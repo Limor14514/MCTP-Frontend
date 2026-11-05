@@ -27,11 +27,11 @@ export function buildComment({ lighthouse, tests, coverage, buildUrl }) {
     sections.push(`- **Lighthouse**：${lighthouse.replace(/^Lighthouse\s*[:：]?\s*/, '')}`)
   }
   if (tests && tests.tests > 0) {
-    sections.push(`- **测试**：${tests.tests} 通过 / ${tests.failed} 失败 / ${tests.skipped} 跳过`)
+    sections.push(`- **测试**：${tests.tests - tests.failed - tests.skipped} 通过 / ${tests.failed} 失败 / ${tests.skipped} 跳过`)
   }
   if (coverage) sections.push(`- **覆盖率**：${coverage}`)
   if (sections.length === 3) sections.push('- 本次构建没有可汇总的报告')
-  if (buildUrl) sections.push('', `[查看 Jenkins 构建](${buildUrl})`)
+  if (buildUrl) sections.push('', `[查看 CI 构建](${buildUrl})`)
   return sections.join('\n')
 }
 

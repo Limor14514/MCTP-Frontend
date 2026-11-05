@@ -4,9 +4,7 @@
  * 使用 .cjs 后缀：package.json 声明了 "type": "module"，若用 .js 后缀，
  * 本文件里的 module.exports 会被当作 ESM 解析而报错，LHCI 将无法加载配置。
  *
- * 构建产物需以 base=/ 生成（见 Jenkinsfile 的「构建项目」阶段），
- * 因为 staticDistDir 会把 dist 直接托管在站点根路径；
- * 线上 GitHub Pages 的 /MCTP-Frontend/ 前缀仍由 vite.config.js 控制。
+ * 相对 base 的 dist 可同时用于根路径 Lighthouse、Pages 和 PR 子目录预览。
  */
 module.exports = {
   ci: {

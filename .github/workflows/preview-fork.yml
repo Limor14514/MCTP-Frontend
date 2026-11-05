@@ -16,28 +16,28 @@ on:
         type: string
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  pull-requests: read
   actions: read
 
-concurrency:
-  group: preview-fork-${{ github.event.pull_request.number || inputs.pr_number }}
-  cancel-in-progress: true
-
 jobs:
-  preview:
+  resolve:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.head.repo.full_name != github.repository &&
        github.event.pull_request.user.login == 'Limor14514')
+    outputs:
+      ready: ${{ steps.resolve.outputs.ready }}
+      number: ${{ steps.resolve.outputs.number }}
+      head_sha: ${{ steps.resolve.outputs.head_sha }}
+      run_id: ${{ steps.resolve.outputs.run_id }}
     steps:
       - name: Resolve PR and CI run
         id: resolve
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || '' }}
@@ -48,12 +48,18 @@ jobs:
           REPO="$GITHUB_REPOSITORY"
           PR="$PR_NUMBER"
           echo "ready=false" >> "$GITHUB_OUTPUT"
-          if [ "$EVENT_NAME" != "pull_request_target" ]; then
-            info=$(gh api "repos/$REPO/pulls/$PR")
-            HEAD_SHA=$(jq -r .head.sha <<<"$info")
-            HEAD_REPO=$(jq -r .head.repo.full_name <<<"$info")
-            PR_AUTHOR=$(jq -r .user.login <<<"$info")
+          if [[ ! "$PR" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Invalid PR number"
+            exit 1
           fi
+          info=$(gh api "repos/$REPO/pulls/$PR")
+          if [ "$(jq -r .state <<<"$info")" != "open" ]; then
+            echo "::notice::PR is closed; skipping preview"
+            exit 0
+          fi
+          HEAD_SHA=$(jq -r .head.sha <<<"$info")
+          HEAD_REPO=$(jq -r .head.repo.full_name <<<"$info")
+          PR_AUTHOR=$(jq -r .user.login <<<"$info")
 
           if [ "$HEAD_REPO" = "$REPO" ]; then
             echo "same-repo PR is handled by ci.yml preview"
@@ -67,18 +73,30 @@ jobs:
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
 
           if [ -n "$INPUT_RUN_ID" ]; then
+            if [[ ! "$INPUT_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::Invalid CI run id"
+              exit 1
+            fi
             RUN_ID="$INPUT_RUN_ID"
           else
             RUN_ID=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$HEAD_SHA&event=pull_request&per_page=1" --jq '.workflow_runs[0].id // empty')
           fi
           if [ -z "$RUN_ID" ]; then
-            echo "no CI run found for $HEAD_SHA"
-            exit 0
+            echo "::error::No CI run found for the current PR head; rerun after CI starts"
+            exit 1
           fi
 
+          WORKFLOW_ID=$(gh api "repos/$REPO/actions/workflows/ci.yml" --jq '.id')
           for _ in $(seq 1 60); do
-            status=$(gh api "repos/$REPO/actions/runs/$RUN_ID" --jq '.status')
-            conclusion=$(gh api "repos/$REPO/actions/runs/$RUN_ID" --jq '.conclusion // empty')
+            run=$(gh api "repos/$REPO/actions/runs/$RUN_ID")
+            if ! jq -e --arg sha "$HEAD_SHA" --arg repo "$HEAD_REPO" --argjson workflow "$WORKFLOW_ID" \
+              '.head_sha == $sha and .head_repository.full_name == $repo and .event == "pull_request" and .workflow_id == $workflow' \
+              <<<"$run" >/dev/null; then
+              echo "::error::CI run does not match this PR revision and workflow"
+              exit 1
+            fi
+            status=$(jq -r .status <<<"$run")
+            conclusion=$(jq -r '.conclusion // empty' <<<"$run")
             if [ "$status" = "completed" ]; then
               if [ "$conclusion" != "success" ]; then
                 echo "CI run $RUN_ID completed as $conclusion; skip preview"
@@ -92,33 +110,65 @@ jobs:
             echo "CI run $RUN_ID did not finish in time"
             exit 1
           fi
+          info=$(gh api "repos/$REPO/pulls/$PR")
+          if ! jq -e --arg sha "$HEAD_SHA" '.state == "open" and .head.sha == $sha' <<<"$info" >/dev/null; then
+            echo "::notice::PR closed or superseded during CI; skipping preview"
+            exit 0
+          fi
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
+  preview:
+    needs: resolve
+    if: needs.resolve.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    steps:
+      - name: Check PR is still open
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.resolve.outputs.number }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+        run: |
+          info=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")
+          ready=$(jq -r --arg sha "$HEAD_SHA" '.state == "open" and .head.sha == $sha' <<<"$info")
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+          if [ "$ready" != "true" ]; then
+            echo "::notice::PR closed or superseded; skipping preview"
+          fi
+
       - name: Download dist artifact
-        if: steps.resolve.outputs.ready == 'true'
-        uses: actions/download-artifact@v4
+        if: steps.pr.outputs.ready == 'true'
+        uses: actions/download-artifact@v8
         with:
           name: dist
-          run-id: ${{ steps.resolve.outputs.run_id }}
+          run-id: ${{ needs.resolve.outputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: dist
 
       - name: Deploy preview to gh-pages
-        if: steps.resolve.outputs.ready == 'true'
+        if: steps.pr.outputs.ready == 'true'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
-          destination_dir: preview/pr-${{ steps.resolve.outputs.number }}
+          destination_dir: preview/pr-${{ needs.resolve.outputs.number }}
           keep_files: true
 
       - name: Upsert preview comment
-        if: steps.resolve.outputs.ready == 'true'
+        if: steps.pr.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ steps.resolve.outputs.number }}
-          PREVIEW_URL: https://selfabandonment.github.io/MCTP-Frontend/preview/pr-${{ steps.resolve.outputs.number }}/
+          PR_NUMBER: ${{ needs.resolve.outputs.number }}
+          PREVIEW_URL: https://selfabandonment.github.io/MCTP-Frontend/preview/pr-${{ needs.resolve.outputs.number }}/
         run: |
           set -e
           body=$(printf '<!-- mctp-preview -->\n### 预览已更新\n\n%s\n\n> 由 GitHub Actions 自动部署；PR 关闭后清理。' "$PREVIEW_URL")
