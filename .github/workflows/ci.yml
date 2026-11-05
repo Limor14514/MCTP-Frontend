@@ -5,6 +5,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -26,7 +27,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --include=dev
 
       - name: Run ESLint
         run: npm run lint:check
@@ -46,15 +47,21 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --include=dev
 
       - name: Unit tests (JUnit + coverage gate)
         run: |
           node --test --experimental-test-coverage \
             --test-reporter=spec --test-reporter-destination=stdout \
             --test-reporter=junit --test-reporter-destination=junit.xml > coverage.txt 2>&1
-          node scripts/junit-normalize.mjs junit.xml
-          node scripts/coverage-gate.mjs coverage.txt 70
+
+      - name: Normalize JUnit report
+        if: always() && hashFiles('junit.xml') != ''
+        run: node scripts/junit-normalize.mjs junit.xml
+
+      - name: Check coverage
+        if: always() && hashFiles('coverage.txt') != ''
+        run: node scripts/coverage-gate.mjs coverage.txt 70
 
       - name: Upload test reports
         if: always()
@@ -65,9 +72,12 @@ jobs:
             junit.xml
             coverage.txt
           if-no-files-found: ignore
+          retention-days: 14
 
       - name: Comment CI report on PR
-        if: github.event_name == 'pull_request' && always()
+        if: >-
+          always() && github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -79,7 +89,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: test
+    needs: [lint, test]
     steps:
       - uses: actions/checkout@v7
 
@@ -89,7 +99,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --include=dev
 
       - name: Build
         run: npm run build
@@ -102,6 +112,7 @@ jobs:
           name: dist
           path: dist
           if-no-files-found: error
+          retention-days: 7
 
   preview:
     runs-on: ubuntu-latest
@@ -113,14 +124,33 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
     steps:
+      - name: Check PR is still open
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          info=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")
+          ready=$(jq -r --arg sha "$HEAD_SHA" '.state == "open" and .head.sha == $sha' <<<"$info")
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+          if [ "$ready" != "true" ]; then
+            echo "::notice::PR closed or superseded; skipping preview"
+          fi
+
       - name: Download dist
+        if: steps.pr.outputs.ready == 'true'
         uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist
 
       - name: Deploy preview to gh-pages
+        if: steps.pr.outputs.ready == 'true'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -129,6 +159,7 @@ jobs:
           keep_files: true
 
       - name: Upsert preview comment
+        if: steps.pr.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -145,3 +176,73 @@ jobs:
             gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body" >/dev/null
             echo "已新增预览评论"
           fi
+
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download dist
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+
+      # 保留现有 advisory 策略；必需 job 存在不等于断言阻塞合并。
+      - name: Run Lighthouse CI
+        id: lighthouse
+        uses: treosh/lighthouse-ci-action@v12
+        continue-on-error: true
+        with:
+          configPath: ./lighthouserc.cjs
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+
+      - name: Report advisory failure
+        if: always() && steps.lighthouse.outcome == 'failure'
+        run: |
+          echo "::warning::Lighthouse failed; this check remains advisory"
+          echo "### Lighthouse advisory failed" >> "$GITHUB_STEP_SUMMARY"
+          echo "Review the Lighthouse logs and artifacts; assertions do not currently block merging." >> "$GITHUB_STEP_SUMMARY"
+
+  notify:
+    if: >-
+      always() && contains(needs.*.result, 'failure') &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    needs: [lint, test, build, lighthouse, preview]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Notify Jenkins
+        id: notification
+        continue-on-error: true
+        env:
+          JENKINS_URL: ${{ secrets.JENKINS_URL }}
+          JENKINS_USER: ${{ secrets.JENKINS_USER }}
+          JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          BUILD_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [ -z "$JENKINS_URL" ] || [ -z "$JENKINS_USER" ] || [ -z "$JENKINS_TOKEN" ]; then
+            echo "::error::Jenkins notification secrets are not configured"
+            exit 1
+          fi
+          BASE="${JENKINS_URL%/}"
+          curl -fsS --connect-timeout 10 --max-time 30 -u "$JENKINS_USER:$JENKINS_TOKEN" \
+            -X POST "$BASE/job/MCTP-Notify/buildWithParameters" \
+            --data-urlencode "REPO=MCTP-FE" \
+            --data-urlencode "STATUS=failure" \
+            --data-urlencode "TITLE=MCTP-FE CI 失败" \
+            --data-urlencode "BRANCH=$BRANCH" \
+            --data-urlencode "PR=$PR_NUMBER" \
+            --data-urlencode "URL=$BUILD_URL" \
+            --data-urlencode "DETAILS=GitHub Actions 构建失败"
+
+      - name: Report notification failure
+        if: always() && steps.notification.outcome == 'failure'
+        run: echo "::warning::Jenkins notification failed; see the notification step logs"

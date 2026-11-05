@@ -1,8 +1,9 @@
 name: PR Preview Cleanup
 
 on:
-  pull_request:
+  pull_request_target:
     types: [closed]
+    branches: [main, develop]
   # 每周兜底：清理已关闭 PR 的预览目录，并在月初压缩 gh-pages 历史
   schedule:
     - cron: '0 3 * * 1'
@@ -14,16 +15,20 @@ on:
         default: false
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
 
 jobs:
   cleanup:
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Remove preview from gh-pages
         env:
@@ -63,13 +68,16 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: read
     steps:
       - name: Remove previews for closed PRs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          open=$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&per_page=100" --jq '.[].number')
+          open=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls?state=open&per_page=100" --jq '.[].number')
           git clone --depth 1 --branch gh-pages \
             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" pages
           cd pages
@@ -108,5 +116,5 @@ jobs:
           git -c user.name="github-actions[bot]" \
             -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -m "chore: 压缩 gh-pages 历史"
-          git push -f origin HEAD:gh-pages
+          git push --force-with-lease=refs/heads/gh-pages:$(git rev-parse origin/gh-pages) origin HEAD:gh-pages
           echo "gh-pages 历史已压缩为单个提交"

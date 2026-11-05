@@ -11,6 +11,12 @@ dist/
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+
+# CI reports
+junit.xml
+coverage.txt
 
 # Editor directories and files
 .vscode/*
