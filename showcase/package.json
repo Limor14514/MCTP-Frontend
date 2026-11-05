@@ -2,7 +2,7 @@
   "name": "mctp-showcase",
   "version": "1.0.0",
   "private": true,
-  "description": "MCTP 方向 A 传动装配线重设计独立展示工程（与 MCTP-Frontend 完全解耦）",
+  "description": "MCTP 官网重设计展示站（独立 Vite 子工程，数据为本地模拟）",
   "type": "module",
   "scripts": {
     "dev": "vite --port 5174",
@@ -10,7 +10,6 @@
     "preview": "vite preview --port 5175"
   },
   "dependencies": {
-    "@fontsource/pixelify-sans": "^5.2.5",
     "@fontsource/vt323": "^5.2.5",
     "gsap": "^3.15.0",
     "three": "^0.187.0",

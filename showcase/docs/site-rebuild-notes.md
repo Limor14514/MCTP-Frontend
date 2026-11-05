@@ -2,8 +2,16 @@
 
 > 说明：文中提到的 `src/site/_backup-r2/`、`src/site/_backup-r6/` 是开发过程中的本地备份，**没有提交到仓库**。
 
-新站点全部放在 `src/site/`，旧版展示页**原样保留**在 `src/preview/`，访问 `/legacy` 仍可打开，用来对照或回退。
-旧路由的本地备份未提交到仓库。
+新站点全部放在 `src/site/`。上一版展示页（旧的 `/legacy` 路由和 `src/preview/` 副本）已移除，
+需要对照时请看主应用里已有的 `/preview` 页面，不在这里重复维护一份。
+
+## 部署与构建
+
+- 本地开发：`npm run dev`（http://localhost:5174）；本地构建：`npm run build`（产物在 `dist/`，同时生成 `404.html` 兜底）。
+- 部署到子路径：`SHOWCASE_BASE=/子路径/ npm run build`；子路径下还要直接打开子页面链接时，再加 `VITE_ROUTER_MODE=hash`（地址形如 `/子路径/#/home`）。
+- CI：仓库根目录 `.github/workflows/ci.yml` 的 `showcase` 任务会单独安装依赖并构建本工程；PR 改动了 `showcase/` 时，预览站部署的是本工程的产物。
+- 页面按需加载（three.js 只在索引页的代码块里），首屏之后空闲时预取其余页面。
+- 页面右下角常驻"演示站 · 数据为本地模拟"标记：登录、公告、反馈、评论都是浏览器本地模拟数据，管理员身份没有真实鉴权，不要接到正式站的导航里。
 
 ## 页面流程
 

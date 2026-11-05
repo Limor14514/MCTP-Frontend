@@ -9,8 +9,18 @@
 cd showcase
 npm install
 npm run dev      # http://localhost:5174
-npm run build    # 产物在 showcase/dist/
+npm run build    # 产物在 showcase/dist/（同时生成 404.html 兜底）
 ```
+
+部署到子路径（例如 GitHub Pages 的 PR 预览）：
+
+```bash
+SHOWCASE_BASE=/MCTP-Frontend/preview/pr-58/ VITE_ROUTER_MODE=hash npm run build
+```
+
+`SHOWCASE_BASE` 是部署的子路径（以 / 开头和结尾）；`VITE_ROUTER_MODE=hash` 让地址变成 `.../#/home`，
+这样在 GitHub Pages 的子路径下也能直接打开子页面链接（GitHub Pages 只认站点根目录的 404.html）。
+CI 的 `showcase` 任务就是这样构建预览的。
 
 ## 页面
 
@@ -23,9 +33,10 @@ npm run build    # 产物在 showcase/dist/
 | `/feedback` | 反馈页（"书与笔"） |
 | `/legal/:doc` | 用户协议 / 隐私政策 / 社区规范 / 免责声明（草案） |
 | `/login` | 登录占位页（模拟登录按钮） |
-| `/legacy` | 上一版展示页，作对照 |
 
 ## 现状与限制
+
+- **这是演示站**：页面右下角常驻"演示站 · 数据为本地模拟"标记，不要接到正式站的导航里。
 
 - 登录、公告、反馈、评论目前都是**本地模拟数据**（`src/site/services/`），还没接 MCTP-API；
   需要后端补的接口和字段见 `docs/site-rebuild-notes.md`「哪些是模拟的」一节。
@@ -37,4 +48,3 @@ npm run build    # 产物在 showcase/dist/
 
 - `docs/site-rebuild-notes.md`：需求 ↔ 文件对照、每轮改动、模拟数据说明
 - `docs/3d-model-guide.md`：索引页 3D 模型制作与导入教程
-- `docs/showcase-notes.md`：上一版展示页（`/legacy`）的说明

@@ -114,10 +114,57 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # showcase/ 是独立的展示站子工程（自带 package.json），根目录的 lint / build 不会检查它，这里单独构建一次作为门禁。
+  # PR 改动了 showcase/ 时，额外上传 showcase-dist，预览任务会优先部署它（否则仍部署主应用的 dist）。
+  showcase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2 # PR 的合并提交 + 它的第一个父提交（目标分支），用来判断 showcase/ 有没有改动
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: showcase/package-lock.json
+
+      - name: Detect showcase changes
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && ! git diff --quiet HEAD^1 HEAD -- showcase/; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install showcase dependencies
+        working-directory: showcase
+        run: npm ci
+
+      # PR 预览部署在 gh-pages 的 preview/pr-<编号>/ 子路径下：base 指向这个子路径，
+      # 并用 hash 路由（GitHub Pages 只认站点根目录的 404.html，子路径下直接打开 /home 会 404）。
+      - name: Build showcase
+        working-directory: showcase
+        env:
+          SHOWCASE_BASE: ${{ github.event_name == 'pull_request' && format('/{0}/preview/pr-{1}/', github.event.repository.name, github.event.pull_request.number) || '/' }}
+          VITE_ROUTER_MODE: hash
+        run: npm run build
+
+      - name: Upload showcase dist
+        if: steps.changes.outputs.changed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: showcase-dist
+          path: showcase/dist
+          if-no-files-found: error
+          retention-days: 7
+
   preview:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: build
+    needs: [build, showcase]
     if: >-
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
@@ -142,8 +189,18 @@ jobs:
             echo "::notice::PR closed or superseded; skipping preview"
           fi
 
-      - name: Download dist
+      # PR 改了 showcase/ 时 showcase 任务会上传 showcase-dist，优先部署它；没有这个产物时下载失败，改用主应用的 dist
+      - name: Download showcase dist
+        id: showcase
         if: steps.pr.outputs.ready == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: showcase-dist
+          path: dist
+
+      - name: Download dist
+        if: steps.pr.outputs.ready == 'true' && steps.showcase.outcome != 'success'
         uses: actions/download-artifact@v8
         with:
           name: dist
@@ -212,7 +269,7 @@ jobs:
       always() && contains(needs.*.result, 'failure') &&
       (github.event_name != 'pull_request' ||
        github.event.pull_request.head.repo.full_name == github.repository)
-    needs: [lint, test, build, lighthouse, preview]
+    needs: [lint, test, build, showcase, lighthouse, preview]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

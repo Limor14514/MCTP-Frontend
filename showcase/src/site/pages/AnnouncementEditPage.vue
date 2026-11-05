@@ -112,6 +112,8 @@ async function save() {
           </button>
         </div>
       </header>
+      <!-- 评审要求：管理员功能要明确标注为演示 -->
+      <p class="demo-note">演示功能：这里的"管理员"是本地模拟的账号，没有真实鉴权；保存的公告只存在你自己的浏览器里。</p>
       <p v-if="message" class="msg" :class="{ ok: message === '已保存' }">{{ message }}</p>
       <ul v-if="errors.length" class="errs">
         <li v-for="e in errors" :key="e">{{ e }}</li>
@@ -191,6 +193,14 @@ async function save() {
   gap: 16px;
   padding-top: 18vh;
   color: rgba(255, 255, 255, 0.7);
+}
+.demo-note {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: #1a1206;
+  background: #ffb347;
+  box-shadow: 0 0 0 2px var(--outline);
 }
 .top {
   display: flex;

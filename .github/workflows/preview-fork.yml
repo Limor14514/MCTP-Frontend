@@ -145,8 +145,20 @@ jobs:
             echo "::notice::PR closed or superseded; skipping preview"
           fi
 
-      - name: Download dist artifact
+      # 与 ci.yml 的 preview 相同：PR 改了 showcase/ 时优先部署 showcase-dist，没有就用主应用的 dist
+      - name: Download showcase dist artifact
+        id: showcase
         if: steps.pr.outputs.ready == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: showcase-dist
+          run-id: ${{ needs.resolve.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist
+
+      - name: Download dist artifact
+        if: steps.pr.outputs.ready == 'true' && steps.showcase.outcome != 'success'
         uses: actions/download-artifact@v8
         with:
           name: dist
