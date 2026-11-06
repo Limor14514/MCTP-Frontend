@@ -10,7 +10,7 @@
 | [deploy.yml](../.github/workflows/deploy.yml) | `main` 的 GitHub Pages 前端预览，不是生产部署 | push `main`、手动 |
 | [release.yml](../.github/workflows/release.yml) | 当前 `main` CI 成功后请求 Jenkins 生产部署 | CI 完成、手动 |
 | Jenkins `MCTP-Deploy` | 生产前端 dist + 后端镜像部署 | release workflow 请求 |
-| Jenkins `MCTP-Notify` | AstrBot 通知 | CI 失败 |
+| Jenkins `MCTP-Notify` | AstrBot 通知 | CI 失败、同分支此前失败后的首次成功 |
 | Jenkins `MCTP-Cleanup` | 部署工作区磁盘治理 | Jenkins 定时、手动 |
 
 Jenkins 不再运行前后端 CI；旧 `MCTP-FE`、`MCTP-API-CI` 多分支任务不要重新启用。
@@ -25,7 +25,7 @@ Jenkins 不再运行前后端 CI；旧 `MCTP-FE`、`MCTP-API-CI` 多分支任务
 - 单测输出 JUnit 和原生 Node 覆盖率；测试失败后仍规范化已有 JUnit 并检查覆盖率。
 - 行覆盖率下限 **70%**。测试失败和覆盖率失败都会让 `test` job 失败。
 - 测试报告保留 14 天；`dist` 保留 7 天，供预览复用，不重复安装/构建。
-- 同仓 PR 回写 CI 评论，实际通过数为总数减失败数和跳过数；fork 无写权限时不尝试回写。
+- 同仓 PR 回写 CI 评论，实际通过数为总数减失败数和跳过数；按 GitHub 分页查找并清理重复标记评论。fork 无写权限时不尝试回写。
 - Lighthouse 保持 **advisory**：断言失败不阻塞合并，但显示 workflow warning 和汇总。必需 job 成功不代表性能断言通过；如需硬门禁，应单独确认后移除 `continue-on-error`。
 - [lighthouserc.cjs](../lighthouserc.cjs) 的 LCP 4000ms、CLS 0.1、无障碍 0.9 等阈值不变。
 
@@ -68,8 +68,10 @@ HTTP 请求有连接/总超时，不自动重试部署 POST，以免重复入队
 
 ## 通知与仓库配置检查
 
-- CI 失败才请求 `MCTP-Notify`；fork 不尝试使用不可用的 Secrets。
+- `main`/`develop` push 的 CI 成功、失败都会请求 `MCTP-Notify`；同 ref 只保留最新 run 的通知。PR 与手动运行保留失败/恢复通知，不广播每次成功。通知包含失败 job、commit、`ACTOR`（PR 作者或 push/手动运行触发者）；查询历史 run 需要通知 job 的 `actions: read` 权限。Jenkins 任务需声明 `ACTOR` 参数并转成 webhook 的 `actor` 字段，插件才能按作者 @ QQ。
+- 当前 release workflow 只确认 `MCTP-Deploy` 已接收请求，不代表部署已开始或完成。实际部署开始/成功/失败/回滚需由活动 `MCTP-Deploy` 任务的 post actions 调用 `MCTP-Notify`，传 `EVENT=deploy` 和真实结果；回滚状态必须由部署任务明确提供，不能从 HTTP 接收成功推断。本仓库不包含该活动 Jenkins 任务配置。
 - 通知失败显示 warning 和步骤日志，不用 `|| true` 静默吞掉，不改变原 CI 失败结论。
+- PR 评论回写失败同样显示 warning，但不阻断 CI；fork PR 不写评论或发机器人通知，这是避免在执行不可信 PR 代码时授予写权限/Secrets 的限制。
 - Jenkins 的 AstrBot 凭证只在 Jenkins 管理，不写入 GitHub 构建产物或仓库。
 - 截至 2026-11-05，GitHub Actions 默认 Token 是 read；三个 Jenkins Secret 和 HTTPS API 变量已存在。
 - `main`/`develop` 开启严格必需检查与管理员约束，但审批数为 0；前端仓库还允许 merge/rebase，且未自动删除合并分支，与协作规范的 Squash 约定不一致。此次只审查，未修改线上设置。
